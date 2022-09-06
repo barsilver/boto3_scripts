@@ -1,5 +1,3 @@
-#!/Users/bar.silver/.pyenv/shims/python3
-
 import boto3
 
 
