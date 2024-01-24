@@ -33,13 +33,9 @@ The script, named `create_redshiftserverless_snapshot_schedule.py`, is tailored 
 
 ### Usage
 
-1. Clone this repo.
+1. Clone this repository.
 
-    ```bash
-   git clone 
-   ```
-
-2. Make the script executable:
+2. Make the create_redshiftserverless_snapshot_schedule.py script executable:
 
    ```bash
    chmod +x create_redshiftserverless_snapshot_schedule.py
