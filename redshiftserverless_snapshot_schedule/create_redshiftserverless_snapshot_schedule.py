@@ -8,6 +8,7 @@ import botocore
 def cli():
     """Redshift Serverless Snapshot Scheduler Tool"""
 
+
 @cli.command(name='create')
 @click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
 @click.option('--role-arn', default='<default-role-arn>', help='ARN of the IAM role for the scheduled action (default: <default-role-arn>)')
@@ -43,8 +44,6 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
             target_action=default_target_action
         )
 
-        print(response)
-
         scheduled_action_details = response.get('scheduledAction', {})
 
         if scheduled_action_details:
@@ -58,6 +57,7 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
 
     except botocore.exceptions.ParamValidationError as e:
         print(f"Error: {e}")
+
 
 @cli.command(name='update')
 @click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
@@ -94,8 +94,6 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
             target_action=default_target_action
         )
 
-        print(response)
-
         scheduled_action_details = response.get('scheduledAction', {})
 
         if scheduled_action_details:
@@ -109,6 +107,42 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
 
     except botocore.exceptions.ParamValidationError as e:
         print(f"Error: {e}")
+
+
+@cli.command(name='delete')
+@click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
+@click.option('--sso-profile', required=True, help='SSO AWS profile name')
+def delete(namespace_name, sso_profile):
+    """Delete snapshot schedule"""
+    
+    # Your logic for deleting snapshot schedules here
+    session = boto3.Session(profile_name=sso_profile)
+    redshift_serverless_client = session.client('redshift-serverless')
+
+    action_name = f"dailysnapshot-{namespace_name.lower()}"
+
+    try:
+        response = delete_scheduled_action(
+            client=redshift_serverless_client,
+            action_name=action_name
+        )
+
+        if 'Error' not in response:
+            print("Scheduled action deleted successfully!")
+        else:
+            print(f"Scheduled action deletion failed. Error: {response.get('Error')}")
+
+    except botocore.exceptions.ParamValidationError as e:
+        print(f"Error: {e}")
+    except botocore.exceptions.ClientError as e:
+            print(f"Scheduled action deletion failed. {e}")
+
+
+def delete_scheduled_action(client, action_name):
+    response = client.delete_scheduled_action(
+        scheduledActionName=action_name
+    )
+    return response
 
 
 def create_scheduled_action(client, enabled, namespace_name, role_arn, schedule, description, action_name, target_action):
