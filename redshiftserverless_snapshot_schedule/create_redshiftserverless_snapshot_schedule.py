@@ -135,5 +135,11 @@ def update_scheduled_action(client, enabled, namespace_name, role_arn, schedule,
     )
     return response
 
+
+@cli.command()
+def default():
+    """Default command for unrecognized commands"""
+    print("Error: Unrecognized command. Use the --help option for usage information.")
+
 if __name__ == "__main__":
     cli()
