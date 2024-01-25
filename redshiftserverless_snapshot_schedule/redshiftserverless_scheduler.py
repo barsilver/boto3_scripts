@@ -15,6 +15,8 @@ def cli():
 @click.option('--description', default='', help='Description for the scheduled action')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
 @click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot creation. Defaults to running every day at 19:00 (7:00 PM).')
+@click.option('--retention-period', default=7, type=int, help='Retention period for the snapshots in days (default: 7)')
+@click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
 def create(namespace_name, role_arn, description, sso_profile, schedule):
     """Create snapshot schedule"""
     
@@ -22,12 +24,14 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
     
-    default_action_name = f"dailysnapshot-{namespace_name.lower()}"
-    default_retention_period = 7
+    # If action_name is not provided, generate a default one
+    if not action_name:
+        action_name = f"dailysnapshot-{namespace_name.lower()}"
+
     default_target_action = {
         "createSnapshot": {
             "namespaceName": namespace_name,
-            "retentionPeriod": default_retention_period,
+            "retentionPeriod": retention_period,
             "snapshotNamePrefix": namespace_name
         }
     }
@@ -40,7 +44,7 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
             role_arn=role_arn,
             schedule={'cron': f"({schedule})"},
             description=description,
-            action_name=default_action_name,
+            action_name=action_name,
             target_action=default_target_action
         )
 
@@ -65,6 +69,8 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
 @click.option('--description', default='', help='Description for the scheduled action')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
 @click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot update. Defaults to running every day at 19:00 (7:00 PM).')
+@click.option('--retention-period', default=7, type=int, help='Retention period for the snapshots in days (default: 7)')
+@click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
 def update(namespace_name, role_arn, description, sso_profile, schedule):
     """Update snapshot schedule"""
     
@@ -72,12 +78,14 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
     
-    default_action_name = f"dailysnapshot-{namespace_name.lower()}"
-    default_retention_period = 7
+    # If action_name is not provided, generate a default one
+    if not action_name:
+        action_name = f"dailysnapshot-{namespace_name.lower()}"
+
     default_target_action = {
         "updateSnapshot": {
             "namespaceName": namespace_name,
-            "retentionPeriod": default_retention_period,
+            "retentionPeriod": retention_period,
             "snapshotNamePrefix": namespace_name
         }
     }
@@ -90,7 +98,7 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
             role_arn=role_arn,
             schedule={'cron': f"({schedule})"},
             description=description,
-            action_name=default_action_name,
+            action_name=action_name,
             target_action=default_target_action
         )
 
@@ -112,6 +120,7 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
 @cli.command(name='delete')
 @click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
+@click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
 def delete(namespace_name, sso_profile):
     """Delete snapshot schedule"""
     
@@ -119,7 +128,9 @@ def delete(namespace_name, sso_profile):
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
 
-    action_name = f"dailysnapshot-{namespace_name.lower()}"
+    # If action_name is not provided, generate a default one
+    if not action_name:
+        action_name = f"dailysnapshot-{namespace_name.lower()}"
 
     try:
         response = delete_scheduled_action(
