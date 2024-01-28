@@ -162,6 +162,14 @@ def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
         workgroup_name = f"{namespace_name}-workgroup"
 
     try:
+        # Check if the provided namespace exists
+        response = redshift_serverless_client.list_namespaces()
+        namespace_names = [namespace['namespaceName'] for namespace in response.get('namespaces', [])]
+        if namespace_name not in namespace_names:
+            print(f"Error: Namespace '{namespace_name}' not found.")
+            return
+
+        # Restore the namespace from the snapshot
         response = restore_from_snapshot(
             client=redshift_serverless_client,
             namespace_name=namespace_name,
@@ -190,6 +198,7 @@ def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
             print("Error: Restore is in progress. Please check your serverless state or retry later.")
         else:
             print(f"Error: {e}")
+
 
 
 def delete_scheduled_action(client, action_name):
