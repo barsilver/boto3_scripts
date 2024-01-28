@@ -180,7 +180,16 @@ def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
             print("Namespace restoration failed.")
 
     except botocore.exceptions.ClientError as e:
-        print(f"Error: {e}")
+        error_code = e.response.get('Error', {}).get('Code')
+        if error_code == 'ResourceNotFoundException':
+            if "snapshot" in str(e):
+                print(f"Error: Snapshot '{snapshot_name}' not found.")
+            elif "workgroup" in str(e):
+                print(f"Error: Serverless workgroup '{workgroup_name}' not found.")
+        elif error_code == 'ConflictException':
+            print("Error: Restore is in progress. Please check your serverless state or retry later.")
+        else:
+            print(f"Error: {e}")
 
 
 def delete_scheduled_action(client, action_name):
