@@ -14,13 +14,12 @@ def cli():
 @click.option('--role-arn', default='<default-role-arn>', help='ARN of the IAM role for the scheduled action (default: <default-role-arn>)')
 @click.option('--description', default='', help='Description for the scheduled action')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
-@click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot creation. Defaults to running every day at 19:00 (7:00 PM).')
+@click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot creation (UTC). Defaults to running every day at 19:00 (7:00 PM).')
 @click.option('--retention-period', default=7, type=int, help='Retention period for the snapshots in days (default: 7)')
 @click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
-def create(namespace_name, role_arn, description, sso_profile, schedule):
+def create(namespace_name, role_arn, description, sso_profile, schedule, retention_period, action_name):
     """Create snapshot schedule"""
     
-    # Your existing logic for creating snapshot schedules here
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
     
@@ -68,13 +67,12 @@ def create(namespace_name, role_arn, description, sso_profile, schedule):
 @click.option('--role-arn', default='<default-role-arn>', help='ARN of the IAM role for the scheduled action (default: <default-role-arn>)')
 @click.option('--description', default='', help='Description for the scheduled action')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
-@click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot update. Defaults to running every day at 19:00 (7:00 PM).')
+@click.option('--schedule', default='0 19 * * ? *', help='Cron expression specifying the schedule for the Redshift Serverless snapshot update (UTC). Defaults to running every day at 19:00 (7:00 PM).')
 @click.option('--retention-period', default=7, type=int, help='Retention period for the snapshots in days (default: 7)')
 @click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
-def update(namespace_name, role_arn, description, sso_profile, schedule):
+def update(namespace_name, role_arn, description, sso_profile, schedule, retention_period, action_name):
     """Update snapshot schedule"""
     
-    # Your logic for updating snapshot schedules here
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
     
@@ -83,7 +81,7 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
         action_name = f"dailysnapshot-{namespace_name.lower()}"
 
     default_target_action = {
-        "updateSnapshot": {
+        "createSnapshot": {
             "namespaceName": namespace_name,
             "retentionPeriod": retention_period,
             "snapshotNamePrefix": namespace_name
@@ -121,10 +119,9 @@ def update(namespace_name, role_arn, description, sso_profile, schedule):
 @click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
 @click.option('--action-name', default='', help='Name of the scheduled action (default: auto-generated)')
-def delete(namespace_name, sso_profile):
+def delete(namespace_name, sso_profile, action_name):
     """Delete snapshot schedule"""
     
-    # Your logic for deleting snapshot schedules here
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
 
@@ -149,6 +146,43 @@ def delete(namespace_name, sso_profile):
             print(f"Scheduled action deletion failed. {e}")
 
 
+@cli.command(name='restore')
+@click.option('--namespace-name', required=True, help='Name of the Redshift Serverless namespace')
+@click.option('--sso-profile', required=True, help='SSO AWS profile name')
+@click.option('--snapshot-name', required=True, help='Name of the snapshot to restore from')
+@click.option('--workgroup-name', default='', help='Name of the Redshift Serverless workgroup (default: auto-generated)')
+def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
+    """Restore namespace from snapshot"""
+    
+    session = boto3.Session(profile_name=sso_profile)
+    redshift_serverless_client = session.client('redshift-serverless')
+
+    # If workgroup_name is not provided, use the generated default of the Redshift Serverless Terraform module
+    if not workgroup_name:
+        workgroup_name = f"{namespace_name}-workgroup"
+
+    try:
+        response = restore_from_snapshot(
+            client=redshift_serverless_client,
+            namespace_name=namespace_name,
+            snapshot_name=snapshot_name,
+            workgroup_name=workgroup_name
+        )
+
+        if 'namespace' in response:
+            namespace_details = response['namespace']
+            print("Namespace restored successfully!")
+            print(f"Namespace Name: {namespace_details['namespaceName']}")
+            print(f"Database Name: {namespace_details['dbName']}")
+            print(f"IAM Roles: {namespace_details['iamRoles']}")
+            print(f"Status: {namespace_details['status']}")
+        else:
+            print("Namespace restoration failed.")
+
+    except botocore.exceptions.ClientError as e:
+        print(f"Error: {e}")
+
+
 def delete_scheduled_action(client, action_name):
     response = client.delete_scheduled_action(
         scheduledActionName=action_name
@@ -171,12 +205,19 @@ def create_scheduled_action(client, enabled, namespace_name, role_arn, schedule,
 def update_scheduled_action(client, enabled, namespace_name, role_arn, schedule, description, action_name, target_action):
     response = client.update_scheduled_action(
         enabled=enabled,
-        namespaceName=namespace_name,
         roleArn=role_arn,
         schedule=schedule,
         scheduledActionDescription=description,
         scheduledActionName=action_name,
         targetAction=target_action
+    )
+    return response
+
+def restore_from_snapshot(client, namespace_name, snapshot_name, workgroup_name):
+    response = client.restore_from_snapshot(
+        namespaceName=namespace_name,
+        snapshotName=snapshot_name,
+        workgroupName=workgroup_name,
     )
     return response
 
