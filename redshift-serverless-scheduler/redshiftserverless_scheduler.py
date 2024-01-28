@@ -205,7 +205,7 @@ def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
 @click.option('--retention-period', default=7, type=int, help='Retention period of the snapshots that you copy to the destination region in days (default: 7)')
 @click.option('--destination-region', default='us-east-2', help='The destination region that you want to copy snapshots to.')
 def restore(sso_profile, namespace_name, retention_period, destination_region):
-    """   """
+    """Copy snapshots to a specified destination region"""
     
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
@@ -218,7 +218,7 @@ def restore(sso_profile, namespace_name, retention_period, destination_region):
             print(f"Error: Namespace '{namespace_name}' not found.")
             return
 
-        # Restore the namespace from the snapshot
+        # Create a snapshot copy configuration for the namespace
         response = create_snapshot_copy_configuration(
             client=redshift_serverless_client,
             namespace_name=namespace_name,
@@ -244,7 +244,7 @@ def restore(sso_profile, namespace_name, retention_period, destination_region):
 @click.option('--namespace-name', required=True, help='The name of the Redshift Serverless namespace to copy snapshots from')
 @click.option('--sso-profile', required=True, help='SSO AWS profile name')
 def restore(sso_profile, namespace_name):
-    """   """
+    """Delete snapshot copy configuration"""
     
     session = boto3.Session(profile_name=sso_profile)
     redshift_serverless_client = session.client('redshift-serverless')
