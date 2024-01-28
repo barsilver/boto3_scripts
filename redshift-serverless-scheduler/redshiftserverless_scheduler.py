@@ -199,6 +199,48 @@ def restore(namespace_name, sso_profile, snapshot_name, workgroup_name):
         else:
             print(f"Error: {e}")
 
+@cli.command(name='copy-snapshots')
+@click.option('--namespace-name', required=True, help='The name of the Redshift Serverless namespace to copy snapshots from')
+@click.option('--sso-profile', required=True, help='SSO AWS profile name')
+@click.option('--retention-period', default=7, type=int, help='Retention period of the snapshots that you copy to the destination region in days (default: 7)')
+@click.option('--destination-region', default='us-east-2', help='The destination region that you want to copy snapshots to.')
+def restore(sso_profile, namespace_name, retention_period, destination_region):
+    """   """
+    
+    session = boto3.Session(profile_name=sso_profile)
+    redshift_serverless_client = session.client('redshift-serverless')
+
+    try:
+        # Check if the provided namespace exists
+        response = redshift_serverless_client.list_namespaces()
+        namespace_names = [namespace['namespaceName'] for namespace in response.get('namespaces', [])]
+        if namespace_name not in namespace_names:
+            print(f"Error: Namespace '{namespace_name}' not found.")
+            return
+
+        # Restore the namespace from the snapshot
+        response = create_snapshot_copy_configuration(
+            client=redshift_serverless_client,
+            namespace_name=namespace_name,
+            retention_period=retention_period,
+            destination_region=destination_region
+        )
+
+        if 'snapshotCopyConfiguration' in response:
+            print("Snapshot copy configuration created successfully!")
+            print(f"Destination Region: {response['snapshotCopyConfiguration']['destinationRegion']}")
+            print(f"Retention Period: {response['snapshotCopyConfiguration']['snapshotRetentionPeriod']} days")
+        else:
+            print("Snapshot copy configuration creation failed.")
+
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'ValidationException':
+            error_message = e.response['Error']['Message']
+            print(f"Error: {error_message}")
+        else:
+            raise e
+
+
 
 
 def delete_scheduled_action(client, action_name):
@@ -239,6 +281,15 @@ def restore_from_snapshot(client, namespace_name, snapshot_name, workgroup_name)
     )
     return response
 
+def create_snapshot_copy_configuration(client, namespace_name, retention_period, destination_region):
+    response = client.create_snapshot_copy_configuration(
+        namespaceName=namespace_name,
+        snapshotRetentionPeriod=retention_period,
+        destinationRegion=destination_region
+    )
+    return response
+
+def 
 
 @cli.command()
 def default():
