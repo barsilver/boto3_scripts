@@ -74,6 +74,8 @@ Before using the Redshift Serverless Snapshot Scheduler Tool, ensure you have:
     }
     ```
 
+**If you are using the default IAM role ARN, `<default-role-arn>`, there is no need to create the IAM role yourself.**
+
 ### Installation
 
 1. Clone the repository to your local machine:
