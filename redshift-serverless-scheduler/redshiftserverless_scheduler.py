@@ -240,7 +240,38 @@ def restore(sso_profile, namespace_name, retention_period, destination_region):
         else:
             raise e
 
+@cli.command(name='delete-snapshots')
+@click.option('--namespace-name', required=True, help='The name of the Redshift Serverless namespace to copy snapshots from')
+@click.option('--sso-profile', required=True, help='SSO AWS profile name')
+def restore(sso_profile, namespace_name):
+    """   """
+    
+    session = boto3.Session(profile_name=sso_profile)
+    redshift_serverless_client = session.client('redshift-serverless')
 
+    try:
+        # Check if a snapshot copy configuration for the provided namespace exists
+        response = redshift_serverless_client.list_snapshot_copy_configurations()
+        snapshot_copy_configurations = response.get('snapshotCopyConfigurations', [])
+        deleted = False
+        for config in snapshot_copy_configurations:
+            if config['namespaceName'] == namespace_name:
+                destination_region = config['destinationRegion']
+                delete_snapshot_copy_configuration(redshift_serverless_client, config['snapshotCopyConfigurationId'])
+                print(f"Snapshot copy configuration deleted successfully for {namespace_name} namespace in {destination_region} region!")
+                deleted = True
+                break
+
+        if not deleted:
+            print(f"No snapshot copy configuration found for namespace {namespace_name}")
+        
+
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'ValidationException':
+            error_message = e.response['Error']['Message']
+            print(f"Error: {error_message}")
+        else:
+            raise e
 
 
 def delete_scheduled_action(client, action_name):
@@ -289,7 +320,11 @@ def create_snapshot_copy_configuration(client, namespace_name, retention_period,
     )
     return response
 
-def 
+def delete_snapshot_copy_configuration(client, snapshot_copy_configuration_id):
+    response = client.delete_snapshot_copy_configuration(
+        snapshotCopyConfigurationId=snapshot_copy_configuration_id
+    )
+    return response
 
 @cli.command()
 def default():
