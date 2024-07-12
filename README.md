@@ -2,105 +2,137 @@
 
 ## Overview
 
-The Redshift Serverless Snapshot Scheduler Tool is a command-line interface (CLI) designed to simplify the management of snapshot schedules for Amazon Redshift Serverless namespaces. It provides commands to create, update, delete snapshot schedules, and restore namespaces from snapshots.
+The Lambda function automates the creation of a scheduled action ("CreateSnapshot") and configures cross-region snapshot copying whenever a new namespace is created in Redshift Serverless. This temporary solution addresses the current limitation in the AWS Terraform Provider, which does not support creating scheduled actions directly. The function ensures that every new namespace is equipped with a scheduled snapshot and a cross-region copy configuration, enhancing data durability and disaster recovery.
 
-This tool was created to address the need for managing snapshot schedules for Redshift Serverless namespaces. At present, the creation and management of these schedules are not directly supported by the Terraform AWS provider. Therefore, this tool serves as a temporary solution until the necessary resources are added to Terraform.
+This function was created to address the need for managing snapshot schedules for Redshift Serverless namespaces. At present, the creation and management of these schedules are not directly supported by the Terraform AWS provider. Therefore, this tool serves as a temporary solution until the necessary resources are added to Terraform.
 
-## Purpose
+## Resources Required
 
-- **Temporary Solution**: As of now, the Terraform AWS provider does not support the direct management of snapshot schedules for Redshift Serverless namespaces. This tool fills that gap by providing a simple CLI for managing these schedules.
-- **Ease of Use**: The tool simplifies the process of creating, updating, and deleting snapshot schedules, allowing users to perform these operations easily from the command line.
-- **Snapshot Restoration**: Additionally, the tool offers functionality to restore namespaces from snapshots, facilitating recovery and maintenance tasks.
-- **AWS CLI Alternative**: While these operations can be performed using the AWS CLI, this tool simplifies the process by providing only the relevant parameters and default values that apply to our project's needs.
+To ensure the Lambda function operates correctly, several AWS resources and configurations are necessary:
 
-## Usage
+- **IAM Role**: The IAM Role provides the necessary permissions for the Lambda function to interact with AWS services, allowing it to create scheduled actions, snapshots, and snapshot copy configurations in Redshift Serverless. It also grants access to CloudWatch Logs for logging purposes.
 
-### Prerequisites
+- **IAM Policy**: The IAM Policy defines the permissions granted to the IAM role for managing scheduled actions and snapshots in Redshift Serverless, as well as Cloudwatch logs from the Lambda function.
 
-Before using the Redshift Serverless Snapshot Scheduler Tool, ensure you have:
-
-- Python 3.x installed on your system.
-- The necessary libraries installed. You can install them using the following command:
-
-    ```bash
-    pip3 install -r requirements.txt
+    ```json
+    {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+        "Action": [
+            "redshift-serverless:CreateScheduledAction",
+            "redshift-serverless:UpdateScheduledAction",
+            "redshift-serverless:DeleteScheduledAction",
+            "redshift-serverless:CreateSnapshot",
+            "redshift-serverless:CreateSnapshotCopyConfiguration",
+            "redshift-serverless:ListSnapshotCopyConfigurations",
+            "redshift-serverless:DeleteSnapshotCopyConfiguration",
+            "redshift-serverless:ListNamespaces",
+            "redshift-serverless:ListScheduledActions",
+            "redshift-serverless:GetNamespace"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+            "arn:aws:redshift-serverless:*:${local.account_id}:namespace/*",
+            "arn:aws:redshift-serverless:*:${local.account_id}:snapshot/*",
+            "arn:aws:redshift-serverless:*:${local.account_id}:scheduledaction/*"
+        ]
+        },
+        {
+        "Action": [
+            "logs:CreateLogGroup"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+            "arn:aws:logs:${local.region}:${local.account_id}:*"
+        ]
+        },
+        {
+        "Action": [
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+            "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.deployment_name}-${var.environment}-${data.aws_region.current.name}:*"
+        ]
+        }
+    ]
+    }
     ```
 
-- **AWS Credentials**: Configure AWS credentials with the necessary permissions. Ensure that the relevant SSO profile is connected to the AWS account you'd like to apply the code to.
-
-- **IAM Policy**: The IAM role used should have the following IAM policy attached:
+- **Trust Relationship**: The trust relationship allows services like Redshift Scheduler, Redshift Serverless, and Lambda to assume the IAM role.
+This trust relationship enables the Redshift scheduler (scheduler.redshift.amazonaws.com) to assume this IAM role to schedule snapshots, and the lambda.amazonaws.com to log to CloudWatch Logs.
 
     ```json
     {
         "Version": "2012-10-17",
         "Statement": [
             {
-                "Action": [
-                    "redshift-serverless:CreateScheduledAction",
-                    "redshift-serverless:UpdateScheduledAction",
-                    "redshift-serverless:DeleteScheduledAction",
-                    "redshift-serverless:CreateSnapshot",
-                    "redshift-serverless:CreateSnapshotCopyConfiguration",
-                    "redshift-serverless:UpdateSnapshotCopyConfiguration",
-                    "redshift-serverless:DeleteSnapshotCopyConfiguration"
-                ],
-                "Effect": "Allow",
-                "Resource": [
-                    "arn:aws:redshift-serverless:*:<AWS_ACCOUNT_ID>:namespace/*",
-                    "arn:aws:redshift-serverless:*:<AWS_ACCOUNT_ID>:snapshot/*"
+            "Effect": "Allow",
+            "Principal": {
+                "Service": [
+                "scheduler.redshift.amazonaws.com",
+                "redshift-serverless.amazonaws.com",
+                "lambda.amazonaws.com"
                 ]
+            },
+            "Action": "sts:AssumeRole"
             }
         ]
-    }
+        }
     ```
 
-- **Trust Relationship**: The IAM role used should have a trust relationship allowing the Redshift service to assume the role. Here's an example trust relationship:
+## Trigger
+The trigger is configured to invoke the Lambda function whenever a new namespace is created in Redshift Serverless. It is set up as a CloudWatch Events rule.
 
+### Configuration
+- **Event Source**: Redshift Serverless namespace creation and namespace deletion events
+- **Target**: Lambda function ARN
     ```json
     {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": [
-                        "scheduler.redshift.amazonaws.com",
-                        "redshift-serverless.amazonaws.com"
-                    ]
-                },
-                "Action": "sts:AssumeRole"
-            }
-        ]
+    "source": ["aws.redshift-serverless"],
+    "detail": {
+        "eventSource": ["redshift-serverless.amazonaws.com"],
+        "eventName": ["CreateNamespace", "DeleteNamespace"]
+    }
     }
     ```
+This configuration captures each Redshift Serverless namespace creation event and triggers the specified Lambda function to handle the snapshot scheduling and cross-region copy configuration. Additionally, it captures delete namespace events, triggering the Lambda function to delete the scheduled action if a namespace deletion occurs, ensuring proper clean-up.
 
-**If you are using the default IAM role ARN, `<default-role-arn>`, there is no need to create the IAM role yourself.**
+## Lambda Function
+The Lambda function automates the creation of a snapshot schedule and configures cross-region snapshot copying. It reads the namespace creation event, configures the snapshot schedule, and sets up the necessary copy configuration.
 
-### Installation
+### Environment Variables
+Refer to the Terraform code for the exact lines where these variables are being set.
 
-1. Clone the repository to your local machine:
+`SCHED`: Schedule invocations must be separated by at least one hour.
+Format of cron expression is `"Minutes Hours Day-of-month Month Day-of-week Year"`.
+Default value: `"0 0,8,16 * * ? *"`. Defaults to running every 8 hours.
 
-    ```bash
-    git clone https://github.com/barsilver/redshift-serverless-scheduler.git
-    ```
+`ROLE_ARN`: The ARN of the IAM role to assume to run the scheduled action.
+The lambda function configuration and the code must use the same IAM role to prevent an AccessDeniedException error. The IAM role is created as part of the Lambda module in Terraform.
 
-2. Navigate to the project directory:
+`RETENTION_PERIOD`: The retention period of the snapshot created by the scheduled action.
+Default value: `7`.
 
-    ```bash
-    cd redshift-serverless-scheduler
-    ```
+`DEST_REGION`: The region to which snapshots will be copied.
+No default value. This variable must be set.
 
-### Commands
+### Manual Execution and Event Handling
+To run the Lambda function manually, you can invoke it with an empty event ({}). This will trigger the if not event section of the Lambda code, where it lists all namespaces and scheduled actions, identifies namespaces without scheduled actions, and creates the necessary scheduled actions and cross-region copy configurations for those namespaces.
 
-The Redshift Serverless Snapshot Scheduler Tool supports the following commands:
+**Steps to run the function manually:**
 
-- **create**: Create a snapshot schedule for a Redshift Serverless namespace.
-- **update**: Update an existing snapshot schedule for a Redshift Serverless namespace.
-- **delete**: Delete an existing snapshot schedule for a Redshift Serverless namespace.
-- **restore**: Restore a Redshift Serverless namespace from a snapshot.
+ Enter the lambda function in the relevant region.
 
-For detailed usage instructions and options for each command, refer to the command-line help:
+1. Click on the Test tab.
 
-```bash
-./redshiftserverless_scheduler.py <command> --help
-```
+2. Edit the Event JSON so it will only contain `{}`.
+
+3. Run the test event.
+
+ After running the test, you can check the CloudWatch logs to verify which scheduled actions were created and to which namespaces they were assigned.
+
+ ### Namespace Status Check Loop
+ When a new namespace is created, the Lambda function includes a loop that retries to check the namespace status. This loop will attempt to check the namespace status up to 20 times, with a 30-second interval between retries. The function will only proceed to create the scheduled actions and snapshot copy configuration once the namespace status is `AVAILABLE`. This ensures that all necessary resources are created only after the namespace is fully available.
