@@ -108,7 +108,7 @@ Refer to the Terraform code for the exact lines where these variables are being 
 
 `SCHED`: Schedule invocations must be separated by at least one hour.
 Format of cron expression is `"Minutes Hours Day-of-month Month Day-of-week Year"`.
-Default value: `"0 0,8,16 * * ? *"`. Defaults to running every 8 hours.
+Default value: `"0 0 * * ? *"`. Defaults to running once a day at midnight (00:00).
 
 `ROLE_ARN`: The ARN of the IAM role to assume to run the scheduled action.
 The lambda function configuration and the code must use the same IAM role to prevent an AccessDeniedException error. The IAM role is created as part of the Lambda module in Terraform.
